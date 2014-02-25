@@ -2,6 +2,7 @@ package sk.rajniak.chips.sample;
 
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
+import android.text.util.Rfc822Tokenizer;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -16,6 +17,6 @@ public class MainActivity extends ActionBarActivity {
         setContentView(R.layout.activity_main);
 
         final RecipientEditTextView recipientTv = (RecipientEditTextView) findViewById(R.id.recipient_tv);
-
+        recipientTv.setTokenizer(new Rfc822Tokenizer());
     }
 }
