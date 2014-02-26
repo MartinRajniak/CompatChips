@@ -1,5 +1,6 @@
 package sk.rajniak.chips.model;
 
+import android.net.Uri;
 import android.text.util.Rfc822Token;
 import android.text.util.Rfc822Tokenizer;
 
@@ -12,6 +13,12 @@ public class RecipientEntry {
      * that is not a real contact.
      */
     public static final int GENERATED_CONTACT = -2;
+
+    public static final int ENTRY_TYPE_PERSON = 0;
+
+    public static final int ENTRY_TYPE_SIZE = 1;
+
+    private final int mEntryType;
 
     private final boolean mIsFirstLevel;
 
@@ -29,8 +36,9 @@ public class RecipientEntry {
      */
     private byte[] mPhotoBytes;
 
-    private RecipientEntry(String displayName, String destination, long contactId, boolean isFirstLevel,
+    private RecipientEntry(int entryType, String displayName, String destination, long contactId, boolean isFirstLevel,
             boolean isValid) {
+        mEntryType = entryType;
         mIsFirstLevel = isFirstLevel;
         mDisplayName = displayName;
         mDestination = destination;
@@ -48,7 +56,7 @@ public class RecipientEntry {
         final Rfc822Token[] tokens = Rfc822Tokenizer.tokenize(address);
         final String tokenizedAddress = tokens.length > 0 ? tokens[0].getAddress() : address;
 
-        return new RecipientEntry(tokenizedAddress, tokenizedAddress, INVALID_CONTACT, true, isValid);
+        return new RecipientEntry(ENTRY_TYPE_PERSON, tokenizedAddress, tokenizedAddress, INVALID_CONTACT, true, isValid);
     }
 
     /**
@@ -58,9 +66,21 @@ public class RecipientEntry {
      */
     public static RecipientEntry constructGeneratedEntry(String display, String address,
             boolean isValid) {
-        return new RecipientEntry(display, address, GENERATED_CONTACT, true, isValid);
+        return new RecipientEntry(ENTRY_TYPE_PERSON, display, address, GENERATED_CONTACT, true, isValid);
     }
 
+    public static RecipientEntry constructTopLevelEntry(String displayName, String destination, long contactId,
+            boolean isValid) {
+        return new RecipientEntry(ENTRY_TYPE_PERSON, displayName, destination, contactId, true, isValid);
+    }
+
+    /**
+     * Determine if this was a RecipientEntry created from recipient info or
+     * an entry from contacts.
+     */
+    public static boolean isCreatedRecipient(long id) {
+        return id == RecipientEntry.INVALID_CONTACT || id == RecipientEntry.GENERATED_CONTACT;
+    }
 
     public String getDisplayName() {
         return mDisplayName;
@@ -74,12 +94,23 @@ public class RecipientEntry {
         return mContactId;
     }
 
-
     public boolean isValid() {
         return mIsValid;
     }
 
     public byte[] getPhotoBytes() {
         return mPhotoBytes;
+    }
+
+    public int getEntryType() {
+        return mEntryType;
+    }
+
+    public boolean isSelectable() {
+        return mEntryType == ENTRY_TYPE_PERSON;
+    }
+
+    public boolean isFirstLevel() {
+        return mIsFirstLevel;
     }
 }

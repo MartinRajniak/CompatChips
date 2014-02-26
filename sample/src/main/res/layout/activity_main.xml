@@ -15,4 +15,10 @@
         android:hint="@string/hint"
         android:minHeight="58dp" />
 
+    <sk.rajniak.chips.RecipientEditTextView
+        android:layout_below="@+id/recipient_tv"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="58dp" />
+
 </RelativeLayout>
