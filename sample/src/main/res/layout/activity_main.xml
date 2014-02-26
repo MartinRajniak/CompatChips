@@ -16,9 +16,19 @@
         android:minHeight="58dp" />
 
     <sk.rajniak.chips.RecipientEditTextView
+        android:id="@+id/focus_tv"
         android:layout_below="@+id/recipient_tv"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:minHeight="58dp" />
+
+    <Button
+        android:id="@+id/append"
+        android:layout_below="@+id/focus_tv"
+        android:layout_width="match_parent"
+        android:layout_height="58dp"
+        android:layout_marginTop="16dp"
+        android:text="@string/append"
+        />
 
 </RelativeLayout>

@@ -5,7 +5,6 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.text.TextUtils;
 import android.text.util.Rfc822Token;
-import android.text.util.Rfc822Tokenizer;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -20,8 +19,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import sk.rajniak.chips.R;
 
@@ -29,8 +26,6 @@ public abstract class BaseRecipientAdapter extends BaseAdapter implements Filter
     private static final String TAG = BaseRecipientAdapter.class.getSimpleName();
 
     private static final boolean DEBUG = false;
-
-    public static final int MAX_LOOKUPS = 50;
 
     /**
      * The preferred number of results to be retrieved. This number may be
@@ -147,6 +142,12 @@ public abstract class BaseRecipientAdapter extends BaseAdapter implements Filter
         return new DefaultFilter();
     }
 
+    public abstract List<RecipientEntry> getAlternativeRecipients(String displayName);
+
+    public abstract HashMap<String, List<RecipientEntry>> getAlternativeRecipients(HashSet<String> displayNames);
+
+    protected abstract HashMap<String, List<RecipientEntry>> getMatchingRecipients(CharSequence constraint);
+
     public interface EntriesUpdatedObserver {
         public void onChanged(List<RecipientEntry> entries);
     }
@@ -154,108 +155,6 @@ public abstract class BaseRecipientAdapter extends BaseAdapter implements Filter
     public void registerUpdateObserver(EntriesUpdatedObserver observer) {
         mEntriesUpdatedObserver = observer;
     }
-
-    public interface RecipientMatchCallback {
-        public void matchesFound(Map<String, RecipientEntry> results);
-        /**
-         * Called with all addresses that could not be resolved to valid recipients.
-         */
-        public void matchesNotFound(Set<String> unfoundAddresses);
-    }
-
-    /**
-     * Given two {@link RecipientEntry}s for the same email address, this will return the one that
-     * contains more complete information for display purposes. Defaults to <code>entry2</code> if
-     * no significant differences are found.
-     */
-    public static RecipientEntry getBetterRecipient(final RecipientEntry entry1,
-            final RecipientEntry entry2) {
-        // If only one has passed in, use it
-        if (entry2 == null) {
-            return entry1;
-        }
-
-        if (entry1 == null) {
-            return entry2;
-        }
-
-        // If only one has a display name, use it
-        if (!TextUtils.isEmpty(entry1.getDisplayName())
-                && TextUtils.isEmpty(entry2.getDisplayName())) {
-            return entry1;
-        }
-
-        if (!TextUtils.isEmpty(entry2.getDisplayName())
-                && TextUtils.isEmpty(entry1.getDisplayName())) {
-            return entry2;
-        }
-
-        // If only one has a display name that is not the same as the destination, use it
-        if (!TextUtils.equals(entry1.getDisplayName(), entry1.getDestination())
-                && TextUtils.equals(entry2.getDisplayName(), entry2.getDestination())) {
-            return entry1;
-        }
-
-        if (!TextUtils.equals(entry2.getDisplayName(), entry2.getDestination())
-                && TextUtils.equals(entry1.getDisplayName(), entry1.getDestination())) {
-            return entry2;
-        }
-
-        // If only one has a photo, use it
-        if (entry1.getPhotoBytes() != null && entry2.getPhotoBytes() == null) {
-            return entry1;
-        }
-
-        if (entry2.getPhotoBytes() != null && entry1.getPhotoBytes() == null) {
-            return entry2;
-        }
-
-        // Go with the second option as a default
-        return entry2;
-    }
-
-    /**
-     * Get a HashMap of address to RecipientEntry that contains all contact
-     * information for a contact with the provided address, if one exists. This
-     * may block the UI, so run it in an async task.
-     *
-     * @param inAddresses Array of addresses on which to perform the lookup.
-     * @param callback RecipientMatchCallback called when a match or matches are found.
-     */
-    public static void getMatchingRecipients(BaseRecipientAdapter adapter, ArrayList<String> inAddresses,
-            RecipientMatchCallback callback) {
-        int addressesSize = Math.min(MAX_LOOKUPS, inAddresses.size());
-        HashSet<String> addresses = new HashSet<>();
-        for (int i = 0; i < addressesSize; i++) {
-            Rfc822Token[] tokens = Rfc822Tokenizer.tokenize(inAddresses.get(i).toLowerCase());
-            addresses.add(tokens.length > 0 ? tokens[0].getAddress() : inAddresses.get(i));
-        }
-
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "Doing reverse lookup for " + addresses.toString());
-        }
-
-        HashMap<String, RecipientEntry> recipientEntries = adapter.getMatchingRecipients(addresses);
-        callback.matchesFound(recipientEntries);
-
-        // See if any entries did not resolve;
-        final Set<String> matchesNotFound = new HashSet<>();
-        if (recipientEntries.size() < addresses.size()) {
-            HashSet<String> unresolvedAddresses = new HashSet<>();
-            for (String address : addresses) {
-                if (!recipientEntries.containsKey(address)) {
-                    unresolvedAddresses.add(address);
-                }
-            }
-
-            matchesNotFound.addAll(unresolvedAddresses);
-        }
-        callback.matchesNotFound(matchesNotFound);
-    }
-
-    protected abstract HashMap<String, RecipientEntry> getMatchingRecipients(HashSet<String> inAddresses);
-
-    protected abstract HashMap<String, List<RecipientEntry>> getMatchingRecipients(CharSequence constraint);
 
     /** Resets {@link #mEntries} and notify the event to its parent ListView. */
     private void updateEntries(List<RecipientEntry> newEntries) {
