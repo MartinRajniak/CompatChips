@@ -79,7 +79,7 @@ public class RecipientEditTextView extends MultiAutoCompleteTextView implements
 
     private static final int MAX_CHIPS_PARSED = 50;
 
-    private final RecipientTextWatcher mTextWatcher;
+    private RecipientTextWatcher mTextWatcher;
 
     private Tokenizer mTokenizer;
 
@@ -147,11 +147,30 @@ public class RecipientEditTextView extends MultiAutoCompleteTextView implements
 
     private boolean mTriedGettingScrollView;
 
+    private final Runnable mAddTextWatcher = new Runnable() {
+        @Override
+        public void run() {
+            if (mTextWatcher == null) {
+                mTextWatcher = new RecipientTextWatcher();
+                addTextChangedListener(mTextWatcher);
+            }
+        }
+    };
+
     private Runnable mHandlePendingChips = new Runnable() {
 
         @Override
         public void run() {
             handlePendingChips();
+        }
+
+    };
+
+    private Runnable mDelayedShrink = new Runnable() {
+
+        @Override
+        public void run() {
+            shrink();
         }
 
     };
@@ -232,6 +251,126 @@ public class RecipientEditTextView extends MultiAutoCompleteTextView implements
                     .getDisplayMetrics());
         }
         a.recycle();
+    }
+
+    @Override
+    public void onFocusChanged(boolean hasFocus, int direction, Rect previous) {
+        super.onFocusChanged(hasFocus, direction, previous);
+        if (!hasFocus) {
+            shrink();
+        } else {
+            expand();
+        }
+    }
+
+    private void shrink() {
+        if (mTokenizer == null) {
+            return;
+        }
+        long contactId = mSelectedChip != null ? mSelectedChip.getEntry().getContactId() : -1;
+        if (mSelectedChip != null && contactId != RecipientEntry.INVALID_CONTACT
+                && (contactId != RecipientEntry.GENERATED_CONTACT)) {
+            clearSelectedChip();
+        } else {
+            if (getWidth() <= 0) {
+                // We don't have the width yet which means the view hasn't been drawn yet
+                // and there is no reason to attempt to commit chips yet.
+                // This focus lost must be the result of an orientation change
+                // or an initial rendering.
+                // Re-post the shrink for later.
+                mHandler.removeCallbacks(mDelayedShrink);
+                mHandler.post(mDelayedShrink);
+                return;
+            }
+            // Reset any pending chips as they would have been handled
+            // when the field lost focus.
+            if (mPendingChipsCount > 0) {
+                postHandlePendingChips();
+            } else {
+                Editable editable = getText();
+                int end = getSelectionEnd();
+                int start = mTokenizer.findTokenStart(editable, end);
+                DrawableRecipientChip[] chips =
+                        getSpannable().getSpans(start, end, DrawableRecipientChip.class);
+                if ((chips == null || chips.length == 0)) {
+                    Editable text = getText();
+                    int whatEnd = mTokenizer.findTokenEnd(text, start);
+                    // This token was already tokenized, so skip past the ending token.
+                    if (whatEnd < text.length() && text.charAt(whatEnd) == ',') {
+                        whatEnd = movePastTerminators(whatEnd);
+                    }
+                    // In the middle of chip; treat this as an edit
+                    // and commit the whole token.
+                    int selEnd = getSelectionEnd();
+                    if (whatEnd != selEnd) {
+                        handleEdit(start, whatEnd);
+                    } else {
+                        commitChip(start, end, editable);
+                    }
+                }
+            }
+            mHandler.post(mAddTextWatcher);
+        }
+        createMoreChip();
+    }
+
+    private void expand() {
+        if (mShouldShrink) {
+            setMaxLines(Integer.MAX_VALUE);
+        }
+        removeMoreChip();
+        setCursorVisible(true);
+        Editable text = getText();
+        setSelection(text != null && text.length() > 0 ? text.length() : 0);
+        // If there are any temporary chips, try replacing them now that the user
+        // has expanded the field.
+        if (mTemporaryRecipients != null && mTemporaryRecipients.size() > 0) {
+            new RecipientReplacementTask().execute();
+            mTemporaryRecipients = null;
+        }
+    }
+
+    /**
+     * Replace the more chip, if it exists, with all of the recipient chips it had
+     * replaced when the RecipientEditTextView gains focus.
+     */
+    private void removeMoreChip() {
+        if (mMoreChip != null) {
+            Spannable span = getSpannable();
+            span.removeSpan(mMoreChip);
+            mMoreChip = null;
+            // Re-add the spans that were removed.
+            if (mRemovedSpans != null && mRemovedSpans.size() > 0) {
+                // Recreate each removed span.
+                DrawableRecipientChip[] recipients = getSortedRecipients();
+                // Start the search for tokens after the last currently visible
+                // chip.
+                if (recipients == null || recipients.length == 0) {
+                    return;
+                }
+                int end = span.getSpanEnd(recipients[recipients.length - 1]);
+                Editable editable = getText();
+                for (DrawableRecipientChip chip : mRemovedSpans) {
+                    int chipStart;
+                    int chipEnd;
+                    String token;
+                    // Need to find the location of the chip, again.
+                    token = (String) chip.getOriginalText();
+                    // As we find the matching recipient for the remove spans,
+                    // reduce the size of the string we need to search.
+                    // That way, if there are duplicates, we always find the correct
+                    // recipient.
+                    chipStart = editable.toString().indexOf(token, end);
+                    end = chipEnd = Math.min(editable.length(), chipStart + token.length());
+                    // Only set the span if we found a matching token.
+                    if (chipStart != -1) {
+                        editable.setSpan(chip, chipStart, chipEnd,
+                                Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    }
+                }
+                mRemovedSpans.clear();
+            }
+        }
     }
 
     @Override
@@ -1371,8 +1510,7 @@ public class RecipientEditTextView extends MultiAutoCompleteTextView implements
         if (adapter != null && adapter.getCount() > 0 && enoughToFilter()
                 && end == getSelectionEnd()) {
             // choose the first entry.
-            // TODO: when we allow drop down items
-            // submitItemAtPosition(0);
+            submitItemAtPosition(0);
             dismissDropDown();
             return true;
         } else {
